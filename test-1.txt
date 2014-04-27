@@ -1,0 +1,25 @@
+/* **************************** */
+/* 名前：ねこ					*/
+/* アカウント：neko	　	　	　	*/
+/* 問題：basic-1-1              */
+/* **************************** */
+
+/**
+ * 標準出力に「こんにちは、世界！」と出力し、改行。
+ */
+public class Basic0101 {
+ 	/**
+  	 * 標準出力に「こんにちは、世界！」と出力し、改行。
+   	 */
+	public void printHello() {
+	    System.out.println("こんにちは、世界！");
+	}
+
+    /**
+     * main メソッド
+     * @param args コマンドライン引数
+     */
+    public static void main(String[] args) {
+       	new Basic0101().printHello();
+    }
+}
