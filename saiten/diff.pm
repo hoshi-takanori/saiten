@@ -17,6 +17,15 @@ sub new {
 	return bless { html => $html }, $class;
 }
 
+# $diff->set(%params)
+# $diff のパラメータを設定する。
+sub set {
+	my ($diff, %params) = @_;
+	foreach my $key (keys %params) {
+		$diff->{$key} = $params{$key} if defined $params{$key};
+	}
+}
+
 #
 # diff ルーチン
 #
@@ -120,16 +129,20 @@ sub conv_line {
 			$pos += defined $cnt ? $cnt : length($c);
 		}
 	};
-	if (! @chars) {
+	if (! @chars && $diff->{show_spaces}) {
 		$add_char->(1, '(空行)', 0);
 	}
 	foreach my $c (@chars) {
 		$c = encode('UTF-8', $c);
 		if ($c eq "\t") {
-			$add_char->(1, substr('--->', $pos % 4 - 4));
-		} elsif ($c eq '　') {
+			if ($diff->{show_spaces}) {
+				$add_char->(1, substr('--->', $pos % 4 - 4));
+			} else {
+				$add_char->(0, substr('    ', $pos % 4 - 4));
+			}
+		} elsif ($c eq '　' && $diff->{show_spaces}) {
 			$add_char->(1, '全', 2);
-		} elsif ($c eq ' ') {
+		} elsif ($c eq ' ' && $diff->{show_spaces}) {
 			$add_char->(1, '_', 1);
 		} elsif ($c eq '&') {
 			$add_char->(0, '&amp;', 1);
@@ -156,16 +169,24 @@ sub print_chunk {
 		return $diff->conv_line(split(//, decode('UTF-8', $_[0])));
 	};
 	if ($ch eq '=') {
-		$html->println(map { '  ' . $conv_line->($_) } @$del);
+		if (! $diff->{add_only} && ! $diff->{diff_only}) {
+			$html->println(map { '  ' . $conv_line->($_) } @$del);
+		}
 	} else {
-		if (@$del && @$add) {
+		if ($diff->{add_only} ? @$add : $diff->{diff_only}) {
+			$html->println('') if defined $diff->{need_separator};
+			$diff->{need_separator} = 1;
+		}
+		if (@$del && @$add && ! $diff->{add_only} && $diff->{diff_chars}) {
 			($del, $add) = $diff->diff_chars($del, $add);
 		} else {
 			@$del = map { $html->span('old_char', $conv_line->($_)) } @$del;
 			@$add = map { $html->span('new_char', $conv_line->($_)) } @$add;
 		}
-		$html->println(map { $html->span('del_mark', '-') .
-				' ' . $html->span('old_line', $_) } @$del);
+		if (! $diff->{add_only}) {
+			$html->println(map { $html->span('del_mark', '-') .
+					' ' . $html->span('old_line', $_) } @$del);
+		}
 		$html->println(map { $html->span('add_mark', '+') .
 				' ' . $html->span('new_line', $_) } @$add);
 	}

@@ -67,11 +67,19 @@ sub read_file {
 # メインルーチン。
 sub main {
 	my $app = shift;
+	my %param = $app->get_params;
+
+	my $diff = saiten::diff->new($app->{html});
+	$diff->set(diff_chars => 1, show_spaces => 1);
+	foreach my $key ('add_only', 'diff_only', 'diff_chars', 'show_spaces') {
+		$diff->set($key => $param{$key});
+	}
+
 	my ($old, $new) = ($app->{old_file}, $app->{new_file});
 	my @old = $app->read_file($old);
 	my @new = $app->read_file($new);
+
 	my $html = $app->start_html($old . ' vs ' . $new);
-	my $diff = saiten::diff->new($html);
 	$html->print_open('pre');
 	$diff->print_diff(\@old, \@new);
 	$html->print_close('pre');
