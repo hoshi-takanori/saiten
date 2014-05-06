@@ -96,6 +96,14 @@ sub today {
 	return sprintf("%04d-%02d-%02d", $time[5] + 1900, $time[4] + 1, $time[3]);
 }
 
+# $app->trim_date($date) : $date
+# 日付文字列 "yyyy-mm-dd hh:mm:ss.xxx" のミリ秒部分を取り除いたものを返す。
+sub trim_date {
+	my ($app, $date) = @_;
+	$date =~ s/\..*$// if defined $date;
+	return $date;
+}
+
 #
 # top ページ
 #

@@ -32,11 +32,16 @@ sub clear {
 # HTML タグ文字列ルーチン
 #
 
-# $html->key_value($key => $value)
+# $html->kv($key => $value [, $key => $value, ...])
 # $value が undef でなければ $key => $value を、undef なら () を返す。
-sub key_value {
-	my ($html, $key, $value) = @_;
-	return defined $value ? ($key => $value) : ();
+sub kv {
+	my $html = shift;
+	my @params;
+	while (@_) {
+		my ($key, $value) = (shift, shift);
+		push @params, $key, $value if defined $value;
+	}
+	return @params;
 }
 
 # $html->paren($str [, $flag [, $open [, $close]]])
@@ -143,10 +148,10 @@ sub flush {
 	print @{$html->{buffer}};
 }
 
-# $html->print_open_tag([undef,] $tag [, $key => $value, ...])
+# $html->print_open([undef,] $tag [, $key => $value, ...])
 # 開きタグを <$tag> や <$tag $key="$value" ...> のように表示。
 # 最初の引数が undef ならば改行しない。そうでなければ改行する。
-sub print_open_tag {
+sub print_open {
 	my ($html, $tag, $cr) = (shift, shift, "\n");
 	if (! defined $tag) {
 		($tag, $cr) = (shift, '');
@@ -154,9 +159,9 @@ sub print_open_tag {
 	$html->print($html->open_tag($tag, @_) . $cr);
 }
 
-# $html->print_close_tag($tag)
+# $html->print_close($tag)
 # 閉じタグ </$tag> を表示し、改行する。
-sub print_close_tag {
+sub print_close {
 	my ($html, $tag) = @_;
 	$html->println($html->close_tag($tag));
 }
@@ -191,7 +196,7 @@ sub print_open_form {
 	if ($confirm) {
 		push @args, onsubmit => "return window.confirm('$confirm');";
 	}
-	$html->print_open_tag('form', @args);
+	$html->print_open('form', @args);
 }
 
 # $html->print_input($type, $name [, $value])
@@ -206,7 +211,7 @@ sub print_input {
 	if (defined $value) {
 		push @args, value => $value;
 	}
-	$html->print_open_tag('input', @args);
+	$html->print_open('input', @args);
 }
 
 # $html->print_hidden($key => $value [, ...])
@@ -228,16 +233,6 @@ sub print_option {
 	} else {
 		$html->print_tag('option', $str, value => $value);
 	}
-}
-
-# $html->print_button_form($button, $confirm [, $key => $value, ...])
-# いくつかの hidden 属性とひとつのボタンからなる、単純なフォームを表示。
-sub print_button_form {
-	my ($html, $button, $confirm, @args) = @_;
-	$html->print_open_form('post', undef, $confirm);
-	$html->print_hidden(@args);
-	$html->print_input('submit', undef, $button);
-	$html->print_close_tag('form');
 }
 
 # $html->print_th($str [, $key => $value, ...])
@@ -307,15 +302,15 @@ sub print_head {
 	$title .= ' ' . $html->paren($user) if defined $user;
 	$html->print("Content-Type: text/html; charset=UTF-8\r\n");
 	$html->print("\r\n");
-	$html->print_open_tag('!DOCTYPE', 'html');
-	$html->print_open_tag('html');
-	$html->print_open_tag('head');
-	$html->print_open_tag('meta', charset => 'UTF-8');
+	$html->print_open('!DOCTYPE', 'html');
+	$html->print_open('html');
+	$html->print_open('head');
+	$html->print_open('meta', charset => 'UTF-8');
 	$html->print_tag('title', $title);
 	$html->print_lines($html->{style}, 'style', type => 'text/css');
 	$html->print_lines($html->{script}, 'script', type => 'text/javascript');
-	$html->print_close_tag('head');
-	$html->print_open_tag('body');
+	$html->print_close('head');
+	$html->print_open('body');
 	$html->print_tag('h1', $title);
 }
 
@@ -324,9 +319,9 @@ sub print_head {
 sub print_lines {
 	my ($html, $lines, $tag, @args) = @_;
 	if (@$lines) {
-		$html->print_open_tag($tag, @args) if $tag;
+		$html->print_open($tag, @args) if $tag;
 		$html->println(@$lines);
-		$html->print_close_tag($tag) if $tag;
+		$html->print_close($tag) if $tag;
 	}
 }
 
@@ -335,10 +330,10 @@ sub print_lines {
 sub print_file {
 	my ($html, $file, $tag, @args) = @_;
 	if (defined $file && -f $file && open my $fh, $file) {
-		$html->print_open_tag($tag, @args) if $tag;
+		$html->print_open($tag, @args) if $tag;
 		$html->print(<$fh>);
 		close $fh;
-		$html->print_close_tag($tag) if $tag;
+		$html->print_close($tag) if $tag;
 	}
 }
 
@@ -346,8 +341,8 @@ sub print_file {
 # HTML の終わりを表示して、表示用バッファをフラッシュする。
 sub print_tail {
 	my $html = shift;
-	$html->print_close_tag('body');
-	$html->print_close_tag('html');
+	$html->print_close('body');
+	$html->print_close('html');
 	$html->flush;
 }
 

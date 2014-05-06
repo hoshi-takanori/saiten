@@ -89,21 +89,31 @@ sub query_one {
 	return $cnt > 0 ? @{$rows[0]} : ();
 }
 
-# $db->sql_where($sql, $order [, $cond, $param [, ...]]) : $sql, @params
-# $param が真ならば where 付きのクエリーとパラメータを返す。
-sub sql_where {
-	my ($db, $sql, $order, $where) = (shift, shift, shift, ' where ');
+# $db->sql($sql [, $op, $param [, ...]]) : $sql, @params
+# SQL 文を組み立てる。$op は 'set', 'where', 'order', 'group' のどれか。
+sub sql {
+	my ($db, $sql) = (shift, shift);
 	my @params;
 	while (@_) {
-		my ($cond, $param) = (shift, shift);
-		if (defined $param) {
-			$sql .= $where . $cond;
-			push @params, $param;
-			$where = ' and ';
+		my ($op, $param) = (shift, shift);
+		if (($op eq 'set' || $op eq 'where') && ref $param eq '') {
+			$sql .= ' ' . $op . ' ' . $param if defined $param;
+		} elsif ($op eq 'set' || $op eq 'where') {
+			my $sep = ' ' . $op . ' ';
+			my @values = @$param;
+			while (@values) {
+				my ($key, $value) = (shift @values, shift @values);
+				$sql .= $sep . $key . ($key =~ /\s/ ? '' : ' = ?');
+				push @params, $value;
+				$sep = $op eq 'set' ? ', ' : ' and ';
+			}
+		} elsif ($op eq 'order' || $op eq 'group') {
+			$sql .= ' ' . $op . ' by ' . $param if defined $param;
+		} elsif ($op eq 'limit' || $op eq 'offset') {
+			$sql .= ' ' . $op . ' ' . $param if defined $param;
+		} else {
+			$db->error('不明な op です。');
 		}
-	}
-	if ($order) {
-		$sql .= ' order by ' . $order;
 	}
 	return $sql, @params;
 }
