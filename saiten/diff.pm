@@ -174,7 +174,7 @@ sub print_chunk {
 		}
 	} else {
 		if ($diff->{add_only} ? @$add : $diff->{diff_only}) {
-			$html->println('') if defined $diff->{need_separator};
+			$html->println('') if $diff->{need_separator};
 			$diff->{need_separator} = 1;
 		}
 		if (@$del && @$add && ! $diff->{add_only} && $diff->{diff_chars}) {
@@ -196,6 +196,7 @@ sub print_chunk {
 # diff を $html->println で表示する。
 sub print_diff {
 	my ($diff, $old, $new) = @_;
+	$diff->{need_separator} = 0;
 	$diff->diff_chunks($old, $new, sub { $diff->print_chunk(@_); });
 }
 
