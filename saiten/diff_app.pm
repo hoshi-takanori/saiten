@@ -72,7 +72,9 @@ sub main {
 	my @new = $app->read_file($new);
 	my $html = $app->start_html($old . ' vs ' . $new);
 	my $diff = saiten::diff->new($html);
-	$html->print_tag('pre', $diff->conv_diff(\@old, \@new));
+	$html->print_open('pre');
+	$diff->print_diff(\@old, \@new);
+	$html->print_close('pre');
 	$html->print_tail;
 }
 

@@ -21,39 +21,31 @@ sub new {
 # diff ルーチン
 #
 
-# $diff->diff_chunks($old, $new, $conv_line, $recursive) : @chunks
+# $diff->diff_chunks($old, $new, $put_chunk)
 # diff を生成する。
 sub diff_chunks {
-	my ($diff, $old, $new, $conv_line, $recursive) = @_;
-	my @diffs = Algorithm::Diff::diff($old, $new);
-	my @chunks;
-	my ($i, $j) = (0, 0);
-	my $make_chunk = sub {
-		my ($l, $k) = @_;
-		my @lines;
-		for ( ; $$l < $k; $i++, $j++) {
-			push @lines, $conv_line->($new->[$j]);
+	my ($diff, $old, $new, $put_chunk) = @_;
+	my ($eq, $del, $add) = ([], [], []);
+	my $flush_eq = sub {
+		if (@$eq) {
+			$put_chunk->('=', $eq);
+			$eq = [];
 		}
-		push @chunks, ['=', \@lines] if @lines;
 	};
-	foreach my $hunk (@diffs) {
-		my (@del, @add);
-		foreach my $each (@$hunk) {
-			my ($ch, $k, $line) = @$each;
-			$make_chunk->($ch eq '-' ? \$i : \$j, $k);
-			push @{$ch eq '-' ? \@del : \@add}, $line;
-			$ch eq '-' ? $i++ : $j++;
+	my $flush_ch = sub {
+		if (@$del || @$add) {
+			$put_chunk->('!', $del, $add);
+			$del = [];
+			$add = [];
 		}
-		if ($recursive && @del && @add) {
-			push @chunks, ['!', $diff->diff_chars(\@del, \@add)];
-		} else {
-			@del = map { $conv_line->($_) } @del;
-			@add = map { $conv_line->($_) } @add;
-			push @chunks, ['!', \@del, \@add];
-		}
-	}
-	$make_chunk->(\$j, $#$new + 1);
-	return @chunks;
+	};
+	my @diffs = Algorithm::Diff::traverse_sequences($old, $new, {
+		MATCH     => sub { $flush_ch->(); push @$eq,  $new->[$_[1]]; },
+		DISCARD_A => sub { $flush_eq->(); push @$del, $old->[$_[0]]; },
+		DISCARD_B => sub { $flush_eq->(); push @$add, $new->[$_[1]]; }
+	});
+	$flush_eq->();
+	$flush_ch->();
 }
 
 # $diff->diff_chars($del, $add) : \@del, \@add
@@ -62,7 +54,8 @@ sub diff_chars {
 	my ($diff, $del, $add) = @_;
 	my @old = split //, decode('UTF-8', join("\n", @$del));
 	my @new = split //, decode('UTF-8', join("\n", @$add));
-	my @chunks = $diff->diff_chunks(\@old, \@new, sub { return $_[0]; });
+	my @chunks;
+	$diff->diff_chunks(\@old, \@new, sub { push @chunks, [@_]; });
 	my @del = $diff->make_lines('-', @chunks);
 	my @add = $diff->make_lines('+', @chunks);
 	return \@del, \@add;
@@ -154,30 +147,35 @@ sub conv_line {
 	return $line;
 }
 
-# $diff->conv_diff($old, $new) : $string
-# diff を表示用文字列に変換する。
-sub conv_diff {
-	my ($diff, $old, $new) = @_;
+# $diff->print_chunk($ch, $del, $add)
+# chunk を $html->println で表示する。
+sub print_chunk {
+	my ($diff, $ch, $del, $add) = @_;
 	my $html = $diff->{html};
-	my @chunks = $diff->diff_chunks($old, $new, sub { return
-			$diff->conv_line(split(//, decode('UTF-8', $_[0]))); }, 1);
-	my @lines;
-	foreach my $chunk (@chunks) {
-		my ($ch, $del, $add) = @$chunk;
-		if ($ch eq '=') {
-			push @lines, map { '  ' . $_ } @$del;
+	my $conv_line = sub {
+		return $diff->conv_line(split(//, decode('UTF-8', $_[0])));
+	};
+	if ($ch eq '=') {
+		$html->println(map { '  ' . $conv_line->($_) } @$del);
+	} else {
+		if (@$del && @$add) {
+			($del, $add) = $diff->diff_chars($del, $add);
 		} else {
-			if (! @$del || ! @$add) {
-				@$del = map { $html->span('old_char', $_) } @$del;
-				@$add = map { $html->span('new_char', $_) } @$add;
-			}
-			push @lines, map { $html->span('del_mark', '-') .
-					' ' . $html->span('old_line', $_) } @$del;
-			push @lines, map { $html->span('add_mark', '+') .
-					' ' . $html->span('new_line', $_) } @$add;
+			@$del = map { $html->span('old_char', $conv_line->($_)) } @$del;
+			@$add = map { $html->span('new_char', $conv_line->($_)) } @$add;
 		}
+		$html->println(map { $html->span('del_mark', '-') .
+				' ' . $html->span('old_line', $_) } @$del);
+		$html->println(map { $html->span('add_mark', '+') .
+				' ' . $html->span('new_line', $_) } @$add);
 	}
-	return join("\n", @lines);
+}
+
+# $diff->print_diff($old, $new)
+# diff を $html->println で表示する。
+sub print_diff {
+	my ($diff, $old, $new) = @_;
+	$diff->diff_chunks($old, $new, sub { $diff->print_chunk(@_); });
 }
 
 1;
