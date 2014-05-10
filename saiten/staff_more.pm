@@ -128,7 +128,7 @@ sub history {
 		$html->print_close('p');
 	}
 
-	$html->print_open('table', border => 1);
+	$html->print_open('table', class => 'bordered', border => 1);
 
 	$html->print_open('tr');
 	$html->print_th('番号');
@@ -211,7 +211,7 @@ sub queue_exercise {
 
 		$html->print_tag('h2',
 				$app->status_string($cur_status) . " ($count 人)");
-		$html->print_open('table', border => 1);
+		$html->print_open('table', class => 'bordered', border => 1);
 
 		$html->print_open('tr');
 		$html->print_th('新人');
@@ -332,7 +332,7 @@ sub table_staff {
 	my $html = $app->start_html('採点状況');
 	$html->print_p('スタッフごとの採点状況：');
 
-	$html->print_open('table', border => 1);
+	$html->print_open('table', class => 'bordered', border => 1);
 
 	$html->print_open('tr');
 	$html->print_th('クラス', rowspan => 2) if $#classes > 0;
@@ -403,7 +403,7 @@ sub print_daily_table {
 	my ($app, $staff_name, $dates, $date_count, $is_daily) = @_;
 	my $html = $app->{html};
 
-	$html->print_open('table', border => 1);
+	$html->print_open('table', class => 'bordered', border => 1);
 
 	$html->print_open('tr');
 	$html->print_th($is_daily ? '日付' : '時刻', rowspan => 2);

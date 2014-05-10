@@ -29,7 +29,7 @@ sub print_status {
 					$html->paren($id, $levels->{$id} > 1), 1), $fresh, $id);
 			my $staff = '';
 			if (defined $final_staff{$id}) {
-				if ($app->{user_key} eq 'staff') {
+				if ($app->is_staff) {
 					$staff = ' ' . $html->colored_string(
 							$final_staff{$id} eq ($app->{user} || '') ?
 									'darkgreen' : 'dimgray',
@@ -85,7 +85,7 @@ sub print_status_table {
 		}
 	}
 
-	$html->print_open('table', border => 1);
+	$html->print_open('table', class => 'bordered', border => 1);
 
 	$html->print_open('tr');
 	$html->print_th('問題', rowspan => 2);
@@ -228,25 +228,22 @@ sub queue {
 	$app->{html}->add_style($queue_style);
 	$app->{html}->add_script($queue_script);
 	my $html = $app->start_html('全体の状況');
-	$html->print_open('table', border => 1);
+	$html->print_open('table', class => 'bordered', border => 1);
 
 	$html->print_open('tr');
-	$html->print_th('必須問題',
-			colspan => $app->{user_key} eq 'staff' ? 9 : 7);
-	$html->print_th('オプション問題',
-			colspan => $app->{user_key} eq 'staff' ? 8 : 7);
+	$html->print_th('必須問題', colspan => $app->is_staff ? 9 : 7);
+	$html->print_th('オプション問題', colspan => $app->is_staff ? 8 : 7);
 	$html->print_close('tr');
 
 	$html->print_open('tr');
 	foreach my $option (0, 1) {
 		$html->print_th('問題番号', colspan => 2);
 		$html->print_th('採点待ち');
-		$html->print_th('採点中') if $app->{user_key} eq 'staff';
+		$html->print_th('採点中') if $app->is_staff;
 		$html->print_th($app->colored_status(3));
 		$html->print_th($app->colored_status(4));
 		$html->print_th('合計');
-		$html->print_th('未提出')
-				if $app->{user_key} eq 'staff' && $option == 0;
+		$html->print_th('未提出') if $app->is_staff && $option == 0;
 		$html->print_th('平均回数');
 	}
 	$html->print_close('tr');
@@ -255,19 +252,26 @@ sub queue {
 		my ($min_rows, $num_rows) = sort { $a <=> $b }
 				$num_group{$group, 0} || 0, $num_group{$group, 1} || 0;
 
+		my $group_rest = 0;
+		for (my $i = 0; $i < $num_group{$group, 0}; $i++) {
+			my $id = $group . '-' . $exercise_no{$group, 0, $i};
+			$group_rest += $num_fresh - $count{$id, 4};
+		}
+
 		$html->print_open('tbody', id => 'hide-' . $group,
-				style => 'display: none;');
+				$group_rest > 0 ? (style => 'display: none;') : ());
 		$html->print_open('tr');
 		foreach my $option (0, 1) {
 			$html->print_td($html->span('clickable', $group . '-'),
 					onclick => "toggle_group('$group', true);");
 			$html->print_td(undef,
-					colspan => $app->{user_key} eq 'staff' ? 8 - $option : 6);
+					colspan => $app->is_staff ? 8 - $option : 6);
 		}
 		$html->print_close('tr');
 		$html->print_close('tbody');
 
-		$html->print_open('tbody', id => 'show-' . $group);
+		$html->print_open('tbody', id => 'show-' . $group,
+				$group_rest > 0 ? () : (style => 'display: none;'));
 		for (my $i = 0; $i < $num_rows; $i++) {
 			$html->print_open('tr');
 			foreach my $option (0, 1) {
@@ -280,14 +284,14 @@ sub queue {
 					my $no = $exercise_no{$group, $option, $i};
 					my $id = $group . '-' . $no;
 					my $str = $html->paren($no, $option);
-					if ($app->{user_key} eq 'staff') {
+					if ($app->is_staff) {
 						$str = $app->cgi_link($str, 'queue',
 								$app->kv_class($class), exercise => $id);
 					}
 					$html->print_td_center($str);
 					foreach my $status (1, 2, 3, 4) {
 						my $cnt = $count{$id, $status};
-						if ($app->{user_key} ne 'staff') {
+						if (! $app->is_staff) {
 							$cnt += $count{$id, 2} || 0 if $status == 1;
 							next if $status == 2;
 						}
@@ -295,14 +299,14 @@ sub queue {
 								$app->color_by_status($status, $cnt) : undef);
 					}
 					$html->print_td_right($count{$id});
-					if ($app->{user_key} eq 'staff' && $option == 0) {
+					if ($app->is_staff && $option == 0) {
 						my $rest = $num_fresh - $count{$id};
 						$html->print_td_right($rest ? $rest : undef);
 					}
 					$html->print_td_format('%.3g', $avg{$id});
 				} elsif ($i == $min_rows) {
 					$html->print_td(undef, colspan =>
-							$app->{user_key} eq 'staff' ? 8 - $option : 6,
+							$app->is_staff ? 8 - $option : 6,
 							rowspan => $num_rows - $min_rows);
 				}
 			}
@@ -436,7 +440,7 @@ sub sort_table {
 sub table {
 	my ($app, $sort_by) = @_;
 	if (defined $sort_by ? $sort_by !~ /^(today|total|avg|ratio)(_desc)?$/ :
-			$app->{user_key} ne 'staff') {
+			! $app->is_staff) {
 		$app->error('sort_by が不適切です。');
 	}
 
@@ -457,12 +461,12 @@ sub table {
 		$html->print_p('新人ごとの進捗状況：');
 	}
 
-	$html->print_open('table', border => 1);
+	$html->print_open('table', class => 'bordered', border => 1);
 
 	$html->print_open('tr');
-	$html->print_th($app->{user_key} eq 'staff' ?
+	$html->print_th($app->is_staff ?
 			$app->cgi_link('新人', 'table') : '新人', rowspan => 2);
-	$html->print_th('ログイン名', rowspan => 2) if $app->{user_key} eq 'staff';
+	$html->print_th('ログイン名', rowspan => 2) if $app->is_staff;
 	my ($prev_section, $section, $cnt);
 	foreach my $group (@$groups) {
 		$section = $group =~ /^(.*)-\d+$/ ? $1 : 'adv.';
@@ -474,7 +478,7 @@ sub table {
 		$cnt++;
 	}
 	$html->print_th($section, colspan => $cnt) if defined $section;
-	foreach my $i (0 .. 3) {
+	foreach my $i (0 .. 2, $app->{show_ratio} ? (3) : ()) {
 		my $key = ('today', 'total', 'avg', 'ratio')[$i];
 		my $str = ('今日', '合計', '回数', 'OK 率')[$i];
 		$html->print_th($str . $html->open_tag('br') .
@@ -492,7 +496,7 @@ sub table {
 
 	foreach my $fresh (@$fresh_list) {
 		$html->print_open('tr');
-		if ($app->{user_key} eq 'staff') {
+		if ($app->is_staff) {
 			$html->print_td($app->cgi_link($fresh_name->{$fresh},
 					'status', fresh => $fresh));
 			$html->print_td($fresh);
@@ -513,7 +517,8 @@ sub table {
 		}
 		$html->print_td_format('%.3g', $count->{$fresh, 'avg'});
 		$html->print_td_format('%5.1f',
-				$app->calc_ratio($$count{$fresh, 3}, $$count{$fresh, 4}));
+				$app->calc_ratio($count->{$fresh, 3}, $count->{$fresh, 4}))
+						if $app->{show_ratio};
 		$html->print_close('tr');
 	}
 

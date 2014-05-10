@@ -106,4 +106,18 @@ sub cat {
 	return @{$vcs->{cats}->{$rev}};
 }
 
+# $vcs->ls_files($dirname) : @files
+# 指定されたディレクトリにあるファイルのリストを返す。
+sub ls_files {
+	my ($vcs, $dirname) = @_;
+	my @files;
+	foreach my $path ($vcs->svnlook('tree', '--full-paths', $dirname)) {
+		if (length($path) > length($dirname) + 1 &&
+				index($path, $dirname . '/') == 0 && $path !~ /\/$/) {
+			push @files, substr($path, length($dirname) + 1);
+		}
+	}
+	return @files;
+}
+
 1;

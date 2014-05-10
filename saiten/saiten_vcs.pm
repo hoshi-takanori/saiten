@@ -78,6 +78,14 @@ __END__
 # vcs ページ
 #
 
+# $app->vcs($fresh [, $path]) : $vcs
+# vcs オブジェクトを生成する。
+sub vcs {
+	my ($app, $fresh, $path) = @_;
+	return saiten::vcs->new(
+			sub { $app->error(@_) }, $app->{vcs_repo} . '/' . $fresh, $path);
+}
+
 # $app->check_vcs_user($fresh) : $fresh_name
 # vcs ユーザー名 $fresh をチェックする。
 sub check_vcs_user {
@@ -97,11 +105,12 @@ sub check_vcs_path {
 	}
 }
 
-# $app->vcs_path($exercise) : $path
+# $app->vcs_path($exercise, $filename) : $path, $dirname, $basename
 # vcs 用のパス名を返す。
 sub vcs_path {
-	my ($app, $exercise) = @_;
+	my ($app, $exercise, $filename) = @_;
 	$app->db->check_exercise($exercise);
+	$app->check_vcs_path($filename) if defined $filename;
 	my ($dir, $class);
 	if ($exercise =~ /^([^-])([^-]*)-(\d+)-(\d+)$/) {
 		my ($a, $aa, $b, $c, $d) = ($1, $1, $2, $3, $4);
@@ -114,8 +123,9 @@ sub vcs_path {
 	} else {
 		$app->error('その問題には対応していません。');
 	}
-	return sprintf('%s/%s/%s.%s',
-			$app->{base_dir}, $dir, $class, $app->{file_ext});
+	$dir = $app->{base_dir} . '/' . $dir if defined $app->{base_dir};
+	$filename = $class . '.' . $app->{file_ext} if ! defined $filename;
+	return $dir . '/' . $filename, $dir, $filename;
 }
 
 # $app->add_style_script($fresh, $path)
@@ -133,14 +143,58 @@ sub add_style_script {
 	}
 }
 
+# $app->print_select_form($mode, $fresh, $fresh_class, $exercise)
+# 新人と問題を選択するフォームを表示する。
+sub print_select_form {
+	my ($app, $mode, $fresh, $fresh_class, $exercise) = @_;
+	my $html = $app->{html};
+
+	my (@fresh_rows, @exercise_rows);
+	if (defined $mode) {
+		@fresh_rows = $app->db->fresh_exercise($exercise);
+		@exercise_rows = $app->db->exercise_fresh($fresh);
+	} else {
+		@fresh_rows = $app->db->fresh_list;
+		@exercise_rows = map { [$_] } @{$app->{exercises}};
+	}
+
+	$html->print_open_form('get');
+	$html->print_hidden($html->kv(mode => $mode), $app->kv_user);
+	$html->println('新人：');
+	$html->print_open('select', name => 'fresh');
+	foreach my $row (@fresh_rows) {
+		my ($target, $target_name, $serial) = @$row;
+		my $flag = defined $mode && ! $serial;
+		$html->print_option($target,
+				$html->paren($target_name, $flag), $target eq $fresh);
+	}
+	if (defined $app->{vcs_user}) {
+		foreach my $target (keys %{$app->{vcs_user}}) {
+			my $target_name = $app->{vcs_user}->{$target};
+			$html->print_option($target, $target_name, $target eq $fresh);
+		}
+	}
+	$html->print_close('select');
+	$html->println('　問題：');
+	$html->print_open('select', name => 'exercise');
+	foreach my $row (@exercise_rows) {
+		my ($id, $level, $serial) = @$row;
+		my $flag = defined $mode &&
+				(defined $fresh_class ? ! $serial : $level > 1);
+		$html->print_option($id, $html->paren($id, $flag), $id eq $exercise);
+	}
+	$html->print_close('select');
+	$html->print_input('submit', undef, 'Go');
+	$html->print_close('form');
+}
+
 # $app->print_vcs($fresh, $path)
 # vcs テーブルを表示する。
 sub print_vcs {
 	my ($app, $fresh, $path) = @_;
 	my $html = $app->{html};
 
-	my $vcs = saiten::vcs->new(
-			sub { $app->error(@_) }, $app->{vcs_repo} . '/' . $fresh, $path);
+	my $vcs = $app->vcs($fresh, $path);
 	my @revs = $vcs->revs;
 	if (! @revs) {
 		$html->print_p('※ この問題のソースはコミットされてないようです。');
@@ -155,7 +209,7 @@ sub print_vcs {
 		$diff->{show_spaces} = 1;
 	}
 
-	$html->print_open('table', border => 1);
+	$html->print_open('table', class => 'bordered', border => 1);
 
 	$html->print_open('tr');
 	$html->print_th('rev');
@@ -184,7 +238,8 @@ sub print_vcs {
 		if ($app->{vcs_mode} == 1 && $author eq $fresh) {
 			$html->println($html->paren($vcs->cat($rev) . ' lines'));
 		} elsif ($app->{vcs_mode} == 1 || $i == 0) {
-			$html->print_open('pre');
+			$html->print_open('pre',
+					$app->{vcs_mode} == 1 ? () : (id => "pre-$rev"));
 			$diff->print_diff([$vcs->cat($old)], [$vcs->cat($rev)]);
 			$html->print_close('pre');
 		}
@@ -203,12 +258,13 @@ sub fresh_vcs {
 	if (! $app->{vcs_mode}) {
 		$app->error('スタッフコメントは svn update して見てください。');
 	}
-	my $path = $app->vcs_path($exercise);
+	my ($path) = $app->vcs_path($exercise);
 
 	$app->add_style_script($app->{user}, $path);
 	my $html = $app->start_html('スタッフコメント');
 	$html->print_p("問題 $exercise に対するスタッフのコメントです。",
-			'※ svn update しないと svn commit に失敗するよ！');
+			$html->colored_string('red',
+					'※ svn update しないと svn commit に失敗するよ！'));
 
 	$app->print_vcs($app->{user}, $path);
 
@@ -217,56 +273,47 @@ sub fresh_vcs {
 	$html->print_tail;
 }
 
-# $app->staff_vcs($fresh, $exercise)
+# $app->staff_vcs($fresh, $exercise, $filename)
 # スタッフ用 vcs ページを表示する。
 sub staff_vcs {
-	my ($app, $fresh, $exercise) = @_;
+	my ($app, $fresh, $exercise, $filename) = @_;
 	my ($fresh_name, $fresh_class) = $app->check_vcs_user($fresh);
-	my $path = $app->vcs_path($exercise);
+	$filename =~ s/%2f/\//gi if defined $filename;
+	my ($path, $dirname, $basename) = $app->vcs_path($exercise, $filename);
 
 	$app->add_style_script($fresh, $path);
 	my $html = $app->start_html('ソース閲覧');
 	$html->print_p('新人、' . $fresh_name . ' ' . $html->paren($fresh) .
-			" の問題 $exercise に対するソースです。");
+			(defined $filename ? " のファイル $filename です。" :
+					" の問題 $exercise に対するソースです。"));
 
-	$html->print_open('p');
-	$html->print_open_form('get');
-	$html->println('新人選択：');
-	$html->print_hidden(mode => 'vcs', $app->kv_user);
-	$html->print_open('select', name => 'fresh');
-	foreach my $row ($app->db->fresh_exercise($exercise)) {
-		my ($target, $target_name, $serial) = @$row;
-		$html->print_option($target,
-				$html->paren($target_name, ! $serial), $target eq $fresh);
-	}
-	if (defined $app->{vcs_user}) {
-		foreach my $target (keys %{$app->{vcs_user}}) {
-			my $target_name = $app->{vcs_user}->{$target};
-			$html->print_option($target, $target_name, $target eq $fresh);
-		}
-	}
-	$html->print_close('select');
-	$html->print_hidden(exercise => $exercise);
-	$html->print_input('submit', undef, 'Go');
-	$html->print_close('form');
-	$html->print_close('p');
+	$html->print_open('div', style => 'overflow: auto;');
 
-	if (defined $fresh_class) {
-		$html->print_open('p');
+	$html->print_open('div', style => 'float: left;');
+	$app->print_select_form('vcs', $fresh, $fresh_class, $exercise);
+	$html->print_close('div');
+
+	my @files = sort $app->vcs($fresh)->ls_files($dirname);
+	if (@files) {
+		$html->print_tag('div', '　　', style => 'float: left;');
+
+		$html->print_open('div', style => 'float: left;');
 		$html->print_open_form('get');
-		$html->println('問題選択：');
-		$html->print_hidden(mode => 'vcs', $app->kv_user, fresh => $fresh);
-		$html->print_open('select', name => 'exercise');
-		foreach my $row ($app->db->exercise_fresh($fresh)) {
-			my ($id, $level, $serial) = @$row;
-			$html->print_option($id,
-					$html->paren($id, ! $serial), $id eq $exercise);
+		$html->print_hidden(mode => 'vcs', $app->kv_user,
+				fresh => $fresh, exercise => $exercise);
+		$html->println('他のファイル：');
+		$html->print_open('select', name => 'filename');
+		foreach my $file (@files) {
+			$html->print_option($file, $file, $file eq $basename);
 		}
 		$html->print_close('select');
 		$html->print_input('submit', undef, 'Go');
 		$html->print_close('form');
-		$html->print_close('p');
+		$html->print_close('div');
 	}
+
+	$html->print_close('div');
+	$html->print_p('');
 
 	$app->print_vcs($fresh, $path);
 
@@ -281,8 +328,7 @@ sub vcs_diff {
 	$app->check_vcs_user($fresh);
 	$app->check_vcs_path($path);
 
-	my $vcs = saiten::vcs->new(
-			sub { $app->error(@_) }, $app->{vcs_repo} . '/' . $fresh, $path);
+	my $vcs = $app->vcs($fresh, $path);
 
 	my $html = $app->{html};
 	my $diff = saiten::diff->new($html);

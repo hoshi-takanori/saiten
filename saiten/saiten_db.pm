@@ -122,15 +122,24 @@ sub status {
 # queue ページ
 #
 
-# $db->queue_count : %count
+# $db->queue_count($today) : %count
 # 問題ごとの状況を格納したハッシュを返す。
 # なお、$count{$id, $status} は配列をキーとするハッシュの値。
 # http://blog.livedoor.jp/dankogai/archives/50936712.html
 sub queue_count {
-	my $db = shift;
+	my ($db, $today) = @_;
+	$today .= ' %' if defined $today;
+	my $table = defined $today ?
+			'(select * from answer_unique where ' .
+					'(status = 1 and cast(answer_date as text) like ?) or ' .
+					'(status = 2 and cast(reserve_date as text) like ?) or ' .
+					'((status = 3 or status = 4) and ' .
+							'cast(mark_date as text) like ?)) as today' :
+			'answer_unique';
 	my @rows = $db->query_all('問題ごとの状況の取得', $db->sql(
-			'select exercise_id, status, count(*) from answer_unique',
-			group => 'exercise_id, status'));
+			'select exercise_id, status, count(*) from ' . $table,
+			group => 'exercise_id, status'),
+			defined $today ? ($today, $today, $today) : ());
 	my %count;
 	foreach my $row (@rows) {
 		my ($id, $status, $cnt) = @$row;

@@ -20,16 +20,15 @@ sub new {
 	$app->{user_title} = 'スタッフ';
 	$app->{num_class} = 0;
 	$app->{history_limit} = 20;
+	$app->{show_ratio} = 1;
 	$app->{vcs_mode} = 3;
-	$app->{vcs_user} = { neko => 'ねこ' };
 	return $app;
 }
 
 # $app->param_names : @param_names
 # $app の有効なパラメータ名のリストを返す。
 sub param_names {
-	return (shift->SUPER::param_names,
-			'num_class', 'history_limit', 'vcs_user');
+	return (shift->SUPER::param_names, 'num_class', 'history_limit');
 }
 
 #
@@ -53,6 +52,8 @@ sub print_links {
 	my $app = shift;
 	my $html = $app->{html};
 
+	my ($exercises, $levels) = $app->db->exercise_list('level');
+
 	if (defined $app->{user}) {
 		$html->print_open('p');
 		$html->print_open_form('get');
@@ -60,7 +61,11 @@ sub print_links {
 		$html->println($app->cgi_link('全部', 'history') . '、');
 		$html->println('問題：');
 		$html->print_hidden(mode => 'history', $app->kv_user);
-		$html->print_input('text', 'exercise');
+		$html->print_open('select', name => 'exercise');
+		foreach my $id (@$exercises) {
+			$html->print_option($id, $html->paren($id, $levels->{$id} > 1));
+		}
+		$html->print_close('select');
 		$html->print_input('submit', undef, 'Go');
 		$html->print_close('form');
 		$html->print_close('p');
@@ -75,7 +80,11 @@ sub print_links {
 	}
 	$html->println('問題：');
 	$html->print_hidden(mode => 'queue', $app->kv_user);
-	$html->print_input('text', 'exercise');
+	$html->print_open('select', name => 'exercise');
+	foreach my $id (@$exercises) {
+		$html->print_option($id, $html->paren($id, $levels->{$id} > 1));
+	}
+	$html->print_close('select');
 	$html->print_input('submit', undef, 'Go');
 	$html->print_close('form');
 	$html->print_close('p');
@@ -89,7 +98,12 @@ sub print_links {
 	}
 	$html->println('新人：');
 	$html->print_hidden(mode => 'status', $app->kv_user);
-	$html->print_input('text', 'fresh');
+	$html->print_open('select', name => 'fresh');
+	foreach my $row ($app->db->fresh_list) {
+		my ($fresh, $fresh_name) = @$row;
+		$html->print_option($fresh, $fresh_name);
+	}
+	$html->print_close('select');
 	$html->print_input('submit', undef, 'Go');
 	$html->print_close('form');
 	$html->print_close('p');
@@ -206,7 +220,7 @@ sub get_one {
 	my $html = $app->start_html('採点');
 
 	$html->print_p('以下の答案を取り出しました。');
-	$html->print_open('table', border => 1);
+	$html->print_open('table', class => 'bordered', border => 1);
 	$html->print_open('tr');
 	$html->print_th('名前');
 	$html->print_td($app->cgi_link($fresh_name, 'status', fresh => $fresh));
@@ -377,7 +391,7 @@ sub route {
 		$app->staff_status($fresh);
 	} elsif ($mode eq 'vcs') {
 		require saiten::saiten_vcs;
-		$app->staff_vcs($fresh, $exercise);
+		$app->staff_vcs($fresh, $exercise, $param{filename});
 	} elsif ($mode eq 'diff') {
 		require saiten::saiten_vcs;
 		$app->vcs_diff($fresh, $param{path}, $param{old}, $param{new});

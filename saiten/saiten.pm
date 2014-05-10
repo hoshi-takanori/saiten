@@ -15,10 +15,12 @@ sub new {
 	my $app = shift->SUPER::new(@_);
 	$app->{html}->add_style(
 			'body { background: white; margin: 1em; }',
-			'table { border-collapse: collapse; }',
-			'th, td { padding: 3px 4px; }');
+			'table.bordered { border-collapse: collapse; }',
+			'table.bordered th, table.bordered td { padding: 3px 4px; }');
+	$app->{show_ratio} = 0;
 	$app->{vcs_mode} = 0;
 	$app->{vcs_repo} = '/home/SVN/java';
+	$app->{vcs_user} = { neko => 'ねこ' };
 	$app->{base_dir} = 'java';
 	$app->{file_ext} = 'java';
 	$app->{advanced_dir} = { comp => 'compound' };
@@ -30,13 +32,20 @@ sub new {
 # $app->param_names : @param_names
 # $app の有効なパラメータ名のリストを返す。
 sub param_names {
-	return ('message_file', 'vcs_mode', 'vcs_repo', 'base_dir', 'file_ext',
-			'advanced_dir', 'advanced_class');
+	return ('message_file', 'show_ratio', 'vcs_mode', 'vcs_repo', 'vcs_user',
+			'base_dir', 'file_ext', 'advanced_dir', 'advanced_class');
 }
 
 #
 # ユーザー管理ルーチン
 #
+
+# $app->is_staff
+# スタッフ用かどうかを返す。
+sub is_staff {
+	my $app = shift;
+	return $app->{user_key} eq 'staff';
+}
 
 # $app->check_user($user) : $user_name, $user_class
 # ユーザー $user が DB に登録されていることを確認し、氏名と所属クラスを返す。

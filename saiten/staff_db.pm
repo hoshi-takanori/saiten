@@ -96,6 +96,15 @@ sub reserve_answer {
 	}
 }
 
+# $db->answer_status($fresh, $exercise) : ($status, $serial)
+# 新人 $fresh の問題 $exercise の状態を取得する。
+sub answer_status {
+	my ($db, $fresh, $exercise) = @_;
+	return $db->query_one('答案の状態の取得', $db->sql(
+			'select status, serial from answer_unique',
+			where => [fresh_name => $fresh, exercise_id => $exercise]));
+}
+
 #
 # mark ページ
 #
@@ -283,7 +292,7 @@ sub table_hourly {
 sub fresh_exercise {
 	my ($db, $exercise) = @_;
 	return $db->query_all('新人と提出回数の取得',
-			'select name, k_name, serial from fresh left join ' .
+			'select name, k_name, serial from fresh left outer join ' .
 					'(select * from answer_unique where exercise_id = ?) ' .
 					'as u on name = fresh_name order by no', $exercise);
 }
@@ -293,7 +302,7 @@ sub fresh_exercise {
 sub exercise_fresh {
 	my ($db, $fresh) = @_;
 	return $db->query_all('問題と提出回数の取得',
-			'select id, level, serial from exercise left join ' .
+			'select id, level, serial from exercise left outer join ' .
 					'(select * from answer_unique where fresh_name = ?) ' .
 					'as u on id = exercise_id ' .
 					'order by level, part, chapter, number', $fresh);
