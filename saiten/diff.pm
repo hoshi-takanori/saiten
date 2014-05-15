@@ -140,6 +140,10 @@ sub conv_line {
 			} else {
 				$add_char->(0, substr('    ', $pos % 4 - 4));
 			}
+		} elsif ($c eq "\r") {
+			if ($diff->{show_spaces}) {
+				$add_char->(1, '&lt;cr&gt;', 0);
+			}
 		} elsif ($c eq '　' && $diff->{show_spaces}) {
 			$add_char->(1, '全', 2);
 		} elsif ($c eq ' ' && $diff->{show_spaces}) {

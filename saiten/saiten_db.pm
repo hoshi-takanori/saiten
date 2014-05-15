@@ -128,13 +128,11 @@ sub status {
 # http://blog.livedoor.jp/dankogai/archives/50936712.html
 sub queue_count {
 	my ($db, $today) = @_;
-	$today .= ' %' if defined $today;
 	my $table = defined $today ?
 			'(select * from answer_unique where ' .
-					'(status = 1 and cast(answer_date as text) like ?) or ' .
-					'(status = 2 and cast(reserve_date as text) like ?) or ' .
-					'((status = 3 or status = 4) and ' .
-							'cast(mark_date as text) like ?)) as today' :
+					'(status = 1 and date(answer_date) = ?) or ' .
+					'(status = 2 and date(reserve_date) = ?) or ' .
+					'(status in (3, 4) and date(mark_date) = ?)) as today' :
 			'answer_unique';
 	my @rows = $db->query_all('問題ごとの状況の取得', $db->sql(
 			'select exercise_id, status, count(*) from ' . $table,
@@ -154,8 +152,8 @@ sub queue_count {
 sub queue_avg {
 	my $db = shift;
 	my @rows = $db->query_all('問題ごとの平均提出回数の取得',
-			'select id, avg from exercise inner join ' .
-					'(select exercise_id, avg(serial) from answer_unique ' .
+			'select id, avg from exercise inner join (select ' .
+					'exercise_id, avg(serial) as avg from answer_unique ' .
 							'group by exercise_id) as u on exercise_id = id');
 	my %avg;
 	foreach my $row (@rows) {
@@ -182,7 +180,7 @@ sub table_today {
 	my ($db, $today) = @_;
 	return $db->query_all('今日の答案状況', $db->sql(
 			'select fresh_name, status, count(*) from answer_unique',
-			where => ['cast(answer_date as text) like ?' => $today . ' %'],
+			where => ['date(answer_date) = ?' => $today],
 			group => 'fresh_name, status'));
 }
 

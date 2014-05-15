@@ -241,11 +241,10 @@ sub table_staff {
 # 今日の、スタッフごとの採点数を返す。
 sub table_staff_today {
 	my ($db, $today) = @_;
-	$today .= ' %';
 	return $db->query_all('今日の採点数の取得',
 			'select staff_name, status, count(*) from answer ' .
-					'where status = 2 and cast(reserve_date as text) like ? ' .
-					'or status in (3, 4) and cast(mark_date as text) like ? ' .
+					'where status = 2 and date(reserve_date) = ? ' .
+					'or status in (3, 4) and date(mark_date) = ? ' .
 					'group by staff_name, status', $today, $today);
 }
 
@@ -259,8 +258,8 @@ sub table_daily {
 	my ($db, $staff) = @_;
 	return $db->query_all('日付ごとの採点数の取得',
 			'select date, status, count(*) from (select case ' .
-					"when status = 2 then date_trunc('day', reserve_date) " .
-					"when status in (3, 4) then date_trunc('day', mark_date) " .
+					"when status = 2 then date(reserve_date) " .
+					"when status in (3, 4) then date(mark_date) " .
 					'else null end as date, * from answer) as d ' .
 					'where date is not null ' .
 							(defined $staff ? 'and staff_name = ? ' : '') .
@@ -272,15 +271,19 @@ sub table_daily {
 # $staff または全体の、時刻ごとの採点数を返す。
 sub table_hourly {
 	my ($db, $today, $staff) = @_;
+	my $date_hour = "date_part('hour', date)";
+	if ($db->{dbh}->{Driver}->{Name} eq 'SQLite') {
+		$date_hour = "cast(strftime('%H', date) as int)";
+	}
 	return $db->query_all('時刻ごとの採点数の取得',
-			"select date_part('hour', date) as hour, status, count(*) " .
+			'select ' . $date_hour . ' as hour, status, count(*) ' .
 					'from (select case when status = 2 then reserve_date ' .
 					'when status in (3, 4) then mark_date else null end ' .
 					'as date, * from answer) as d ' .
-					'where cast(date as text) like ? ' .
+					'where date(date) = ? ' .
 							(defined $staff ? 'and staff_name = ? ' : '') .
 					'group by hour, status order by hour, status',
-			$today . ' %', (defined $staff ? ($staff) : ()));
+			$today, (defined $staff ? ($staff) : ()));
 }
 
 #

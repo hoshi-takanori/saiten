@@ -39,41 +39,46 @@ sub error {
 # コマンドライン版
 #
 
-# $cmd->list($exercise, $recursive)
-# saiten list [all|exercise] を実行。
+# $cmd->list($show_detail)
+# saiten list [all] を実行。
 sub list {
-	my ($cmd, $exercise, $recursive) = @_;
-	if (defined $exercise && $exercise ne 'all') {
-		my ($level) = $cmd->db->check_exercise($exercise);
-		my @cnt = (0, 0, 0, 0, 0, 0);
-		foreach my $row ($cmd->db->fresh_status(undef, $exercise)) {
-			my ($fresh, $fresh_name, $serial, $status, $date, $staff) = @$row;
-			if ($status) {
-				print "$fresh ($serial)\n" if $status == 1;
-				$cnt[$status]++;
-				$cnt[5]++;
-			} else {
-				$cnt[0]++;
+	my ($cmd, $show_detail) = @_;
+	my ($exercises, $levels, $count) = $cmd->db->exercises;
+	my $cnt = 0;
+	foreach my $id (@$exercises) {
+		if ($count->{$id}) {
+			print $levels->{$id} > 1 ? '(' . $id . ')' : $id,
+					' ... ', $count->{$id}, "\n";
+			if ($show_detail) {
+				$cmd->list_exercise($id);
+				print "\n";
 			}
+			$cnt++;
 		}
-		if (! $recursive) {
-			printf "採点待ち %d, 採点中 %d, NG %d, OK %d, total %d (rest %d)\n",
-					$cnt[1], $cnt[2], $cnt[3], $cnt[4], $cnt[5], $cnt[0];
+	}
+	print "採点待ちの答案はありません。\n" if $cnt == 0;
+	$cmd->status if $show_detail;
+}
+
+# $cmd->list_exercise($exercise, $show_counts)
+# saiten list exercise を実行。
+sub list_exercise {
+	my ($cmd, $exercise, $show_counts) = @_;
+	my $level = $cmd->db->check_exercise($exercise);
+	my @cnt = (0, 0, 0, 0, 0, 0);
+	foreach my $row ($cmd->db->fresh_status(undef, $exercise)) {
+		my ($fresh, $fresh_name, $serial, $status, $date, $staff) = @$row;
+		if ($status) {
+			print "$fresh ($serial)\n" if $status == 1;
+			$cnt[$status]++;
+			$cnt[5]++;
+		} else {
+			$cnt[0]++;
 		}
-	} else {
-		my ($exercises, $levels, $count) = $cmd->db->exercises;
-		my $cnt = 0;
-		foreach my $id (@$exercises) {
-			if ($count->{$id}) {
-				print $levels->{$id} > 1 ? '(' . $id . ')' : $id,
-						' ... ', $count->{$id}, "\n";
-				if (defined $exercise) {
-					$cmd->list($id, 1);
-				}
-				$cnt++;
-			}
-		}
-		print "採点待ちの答案はありません。\n" if $cnt == 0;
+	}
+	if ($show_counts) {
+		printf "採点待ち %d, 採点中 %d, NG %d, OK %d, total %d (rest %d)\n",
+				$cnt[1], $cnt[2], $cnt[3], $cnt[4], $cnt[5], $cnt[0];
 	}
 }
 
@@ -95,6 +100,7 @@ sub queue {
 	}
 	my ($exercises, $levels) = $cmd->db->exercise_list;
 	my %count = $cmd->db->queue_count($date);
+	my %count2 = $cmd->db->queue_count if $date;
 	foreach my $id (@$exercises) {
 		if ($count{$id}) {
 			printf '%-16s', $levels->{$id} > 1 ? '(' . $id . ')' : $id;
@@ -106,8 +112,38 @@ sub queue {
 					print '   -';
 				}
 			}
-			printf "%6d\n", $count{$id};
+			printf '%6d', $count{$id};
+			if ($date) {
+				printf '%8d', $count2{$id, 4};
+				printf '%6d', $count2{$id};
+			}
+			print "\n";
 		}
+	}
+}
+
+# $cmd->queue_exercise($exercise)
+# saiten queue exercise を実行。
+sub queue_exercise {
+	my ($cmd, $exercise) = @_;
+	my $level = $cmd->db->check_exercise($exercise);
+	my @rows = $cmd->db->fresh_status($cmd->{user_class}, $exercise);
+	foreach my $cur_status (4, 3, 2, 1, $level == 1 ? (0) : ()) {
+		my $count = 0;
+		foreach my $row (@rows) {
+			my ($fresh, $fresh_name, $serial, $status, $date, $staff) = @$row;
+			$count++ if ($status || 0) == $cur_status;
+		}
+		next if $count == 0;
+		my $str = ('未提出', '採点待ち', '採点中', 'NG', 'OK')[$cur_status];
+		print $str, ' ... ', $count, "\n";
+		foreach my $row (@rows) {
+			my ($fresh, $fresh_name, $serial, $status, $date, $staff) = @$row;
+			$status = 0 if ! defined $status;
+			next if $status != $cur_status;
+			print $fresh, $cur_status ? (' (', $serial, ')') : (), "\n";
+		}
+		print "\n";
 	}
 }
 
@@ -144,9 +180,7 @@ sub fresh {
 sub status {
 	my $cmd = shift;
 	my @rows = $cmd->db->pendings($cmd->{user});
-	if (! @rows) {
-		print "採点中の答案はありません。\n";
-	}
+	print '採点中の答案', @rows ? ':' : 'はありません。', "\n";
 	foreach my $row (@rows) {
 		my ($fresh, $exercise, $serial) = @$row;
 		print "$exercise $fresh ($serial)\n";
@@ -243,7 +277,7 @@ sub mark {
 sub usage {
 	print "usage: $0 list|queue|fresh|status|get|unget|ng|ok [args]\n";
 	print "    list [all|exercise]    ... list answers in queue\n";
-	print "    queue [date|today]     ... show exercise queue\n";
+	print "    queue [today|exercise] ... show exercise queue\n";
 	print "    fresh fresh_account    ... show fresh's status\n";
 	print "    status                 ... show answers you've got\n";
 	print "    get [exercise [fresh]] ... get one answer\n";
@@ -259,17 +293,34 @@ sub main {
 		print "Content-Type: text/plain\r\n\r\n";
 		$cmd->usage
 	}
-	$cmd->{user} = $ENV{USER};
-	my ($name, $class) = $cmd->db->check_staff($cmd->{user});
+
+	my $user = $ENV{USER};
+	if ($#_ > 0 && ($_[0] eq '-u' || $_[0] eq '-U')) {
+		shift;
+		$user = shift;
+	}
+	my ($name, $class) = $cmd->db->check_staff($user);
+	$cmd->{user} = $user;
 	$cmd->{user_class} = $class;
+
 	my $op = shift;
 	if (! defined $op) {
 		$cmd->usage;
 		exit 1;
 	} elsif ($op eq 'list' || $op eq 'ls') {
-		$cmd->list(@_);
+		my $arg = shift;
+		if (! defined $arg || ($arg eq 'all' || $arg eq '-a')) {
+			$cmd->list($arg);
+		} else {
+			$cmd->list_exercise($arg, 1);
+		}
 	} elsif ($op eq 'queue') {
-		$cmd->queue(@_);
+		my $arg = shift;
+		if (! defined $arg || ($arg eq 'today' || $arg =~/^[-\/\d]+$/)) {
+			$cmd->queue($arg);
+		} else {
+			$cmd->queue_exercise($arg);
+		}
 	} elsif ($op eq 'fresh') {
 		$cmd->fresh(@_);
 	} elsif ($op eq 'status' || $op eq 'st') {

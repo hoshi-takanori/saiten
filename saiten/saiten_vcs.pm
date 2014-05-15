@@ -110,6 +110,7 @@ sub check_vcs_path {
 sub vcs_path {
 	my ($app, $exercise, $filename) = @_;
 	$app->db->check_exercise($exercise);
+	$filename =~ s/%2f/\//gi if defined $filename;
 	$app->check_vcs_path($filename) if defined $filename;
 	my ($dir, $class);
 	if ($exercise =~ /^([^-])([^-]*)-(\d+)-(\d+)$/) {
@@ -186,6 +187,40 @@ sub print_select_form {
 	$html->print_close('select');
 	$html->print_input('submit', undef, 'Go');
 	$html->print_close('form');
+}
+
+# $app->print_select_forms($mode, $fresh, $fresh_class, $exercise, @files)
+# 新人と問題を選択するフォームを表示する。
+sub print_select_forms {
+	my ($app, $mode, $fresh, $fresh_class, $exercise, $basename, @files) = @_;
+	my $html = $app->{html};
+
+	$html->print_open('div', style => 'overflow: auto;');
+
+	$html->print_open('div', style => 'float: left;');
+	$app->print_select_form($mode, $fresh, $fresh_class, $exercise);
+	$html->print_close('div');
+
+	if (@files) {
+		$html->print_tag('div', '　　', style => 'float: left;');
+
+		$html->print_open('div', style => 'float: left;');
+		$html->print_open_form('get');
+		$html->print_hidden($html->kv(mode => $mode), $app->kv_user,
+				fresh => $fresh, exercise => $exercise);
+		$html->println('他のファイル：');
+		$html->print_open('select', name => 'filename');
+		foreach my $file (@files) {
+			$html->print_option($file, $file, $file eq $basename);
+		}
+		$html->print_close('select');
+		$html->print_input('submit', undef, 'Go');
+		$html->print_close('form');
+		$html->print_close('div');
+	}
+
+	$html->print_close('div');
+	$html->print_p('');
 }
 
 # $app->print_vcs($fresh, $path)
@@ -278,7 +313,6 @@ sub fresh_vcs {
 sub staff_vcs {
 	my ($app, $fresh, $exercise, $filename) = @_;
 	my ($fresh_name, $fresh_class) = $app->check_vcs_user($fresh);
-	$filename =~ s/%2f/\//gi if defined $filename;
 	my ($path, $dirname, $basename) = $app->vcs_path($exercise, $filename);
 
 	$app->add_style_script($fresh, $path);
@@ -287,33 +321,8 @@ sub staff_vcs {
 			(defined $filename ? " のファイル $filename です。" :
 					" の問題 $exercise に対するソースです。"));
 
-	$html->print_open('div', style => 'overflow: auto;');
-
-	$html->print_open('div', style => 'float: left;');
-	$app->print_select_form('vcs', $fresh, $fresh_class, $exercise);
-	$html->print_close('div');
-
-	my @files = sort $app->vcs($fresh)->ls_files($dirname);
-	if (@files) {
-		$html->print_tag('div', '　　', style => 'float: left;');
-
-		$html->print_open('div', style => 'float: left;');
-		$html->print_open_form('get');
-		$html->print_hidden(mode => 'vcs', $app->kv_user,
-				fresh => $fresh, exercise => $exercise);
-		$html->println('他のファイル：');
-		$html->print_open('select', name => 'filename');
-		foreach my $file (@files) {
-			$html->print_option($file, $file, $file eq $basename);
-		}
-		$html->print_close('select');
-		$html->print_input('submit', undef, 'Go');
-		$html->print_close('form');
-		$html->print_close('div');
-	}
-
-	$html->print_close('div');
-	$html->print_p('');
+	$app->print_select_forms('vcs', $fresh, $fresh_class, $exercise,
+			$basename, sort $app->vcs($fresh)->ls_files($dirname));
 
 	$app->print_vcs($fresh, $path);
 
