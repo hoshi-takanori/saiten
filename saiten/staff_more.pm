@@ -279,9 +279,10 @@ sub print_count {
 sub table_staff {
 	my $app = shift;
 
+	my @parts = $app->{read_only} ? ('whole') : ('before', 'today', 'whole');
 	my (%staff_count, $rest);
 	my $init_count = sub {
-		foreach my $part ('whole', 'today', 'before') {
+		foreach my $part (@parts) {
 			$staff_count{$part, $_[0]} = { 2 => 0, 3 => 0, 4 => 0 };
 		}
 	};
@@ -306,9 +307,11 @@ sub table_staff {
 		}
 	}
 
-	foreach my $row ($app->db->table_staff_today($app->today)) {
-		my ($staff, $status, $count) = @$row;
-		$staff_count{'today', $staff}->{$status} = $count;
+	if (! $app->{read_only}) {
+		foreach my $row ($app->db->table_staff_today($app->today)) {
+			my ($staff, $status, $count) = @$row;
+			$staff_count{'today', $staff}->{$status} = $count;
+		}
 	}
 
 	$init_count->('total');
@@ -316,10 +319,12 @@ sub table_staff {
 		$init_count->('class-' . $class);
 		foreach my $staff (@{$staff_list{$class}}) {
 			foreach my $status (2, 3, 4) {
-				foreach my $part ('whole', 'today', 'before') {
+				if (! $app->{read_only}) {
 					$staff_count{'before', $staff}->{$status} =
 							$staff_count{'whole', $staff}->{$status} -
 							$staff_count{'today', $staff}->{$status};
+				}
+				foreach my $part (@parts) {
 					$staff_count{$part, 'class-' . $class}->{$status} +=
 							$staff_count{$part, $staff}->{$status};
 					$staff_count{$part, 'total'}->{$status} +=
@@ -334,17 +339,24 @@ sub table_staff {
 
 	$html->print_open('table', class => 'bordered', border => 1);
 
-	$html->print_open('tr');
-	$html->print_th('クラス', rowspan => 2) if $#classes > 0;
-	$html->print_th('スタッフ', rowspan => 2);
-	$html->print_th('ログイン名', rowspan => 2);
-	$html->print_th('昨日まで', colspan => 5);
-	$html->print_th('今日', colspan => 5);
-	$html->print_th('総計', colspan => 5);
-	$html->print_close('tr');
+	if (! $app->{read_only}) {
+		$html->print_open('tr');
+		$html->print_th('クラス', rowspan => 2) if $#classes > 0;
+		$html->print_th('スタッフ', rowspan => 2);
+		$html->print_th('ログイン名', rowspan => 2);
+		$html->print_th('昨日まで', colspan => 5);
+		$html->print_th('今日', colspan => 5);
+		$html->print_th('総計', colspan => 5);
+		$html->print_close('tr');
+	}
 
 	$html->print_open('tr');
-	foreach (0 .. 2) {
+	if ($app->{read_only}) {
+		$html->print_th('クラス') if $#classes > 0;
+		$html->print_th('スタッフ');
+		$html->print_th('ログイン名');
+	}
+	foreach my $part (@parts) {
 		foreach my $status (2, 3, 4) {
 			$html->print_th($app->colored_status($status));
 		}
@@ -367,7 +379,7 @@ sub table_staff {
 			} else {
 				$html->print_td($#classes > 0 ? '小計' : '合計', colspan => 2);
 			}
-			foreach my $part ('before', 'today', 'whole') {
+			foreach my $part (@parts) {
 				$app->print_count($staff_count{$part, $staff})
 			}
 			$html->print_close('tr');
@@ -377,7 +389,7 @@ sub table_staff {
 	if ($#classes > 0) {
 		$html->print_open('tr');
 		$html->print_td('合計', colspan => 3);
-		foreach my $part ('before', 'today', 'whole') {
+		foreach my $part (@parts) {
 			$app->print_count($staff_count{$part, 'total'})
 		}
 		$html->print_close('tr');

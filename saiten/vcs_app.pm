@@ -19,7 +19,6 @@ use saiten::saiten_vcs;
 sub new {
 	my $app = shift->SUPER::new(@_);
 	$app->{dbclass} = 'saiten::saiten_db';
-	$app->{vcs_user} = { neko => 'ねこ' };
 	$app->{vcs_pattern} = {
 		'basic-7-1' => 'Emp.*\.java',
 		'basic-7-2' => '(Comp|Emp).*\.java',
@@ -124,15 +123,16 @@ sub vcs_page {
 	my @cat = $app->cat($fresh, $exercise, $path);
 
 	my $html = $app->start_html($fresh . ' ' . $exercise);
-	$html->print_p($fresh_name . ' ' . $html->paren($fresh) . ' さんの ' .
-			$exercise . ' の答案です。');
+	$html->print_p($fresh_name . ' ' . $html->paren($fresh) . ' さんの' .
+			(defined $filename ? "ファイル $basename です。" :
+					' ' . $exercise . ' の答案です。'));
 
 	my @filenames;
 	if (defined $app->{vcs_pattern}->{$exercise}) {
 		my ($p, $d, $b) = $app->vcs_path($exercise);
 		my $pattern = $app->{vcs_pattern}->{$exercise};
 		@filenames = grep { $_ eq $b || $_ =~ /^$pattern$/ }
-				$app->vcs($fresh)->ls_files($dirname);
+				$app->vcs($fresh, $path)->ls_files($dirname);
 	}
 	$app->print_select_forms(undef, $fresh, undef, $exercise,
 			$basename, sort @filenames);

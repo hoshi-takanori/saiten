@@ -252,7 +252,7 @@ sub queue {
 		my ($min_rows, $num_rows) = sort { $a <=> $b }
 				$num_group{$group, 0} || 0, $num_group{$group, 1} || 0;
 
-		my $group_rest = 0;
+		my $group_rest = $app->{read_only} ? 1 : 0;
 		for (my $i = 0; $i < $num_group{$group, 0}; $i++) {
 			my $id = $group . '-' . $exercise_no{$group, 0, $i};
 			$group_rest += $num_fresh - $count{$id, 4};

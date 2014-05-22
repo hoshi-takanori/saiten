@@ -1,0 +1,10 @@
+create table vcs (
+	fresh text not null,
+	path text not null,
+	rev text not null,
+	author text not null,
+	date timestamp not null,
+	log text not null,
+	cat text not null,
+	primary key (fresh, path, rev)
+);

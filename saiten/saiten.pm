@@ -17,8 +17,10 @@ sub new {
 			'body { background: white; margin: 1em; }',
 			'table.bordered { border-collapse: collapse; }',
 			'table.bordered th, table.bordered td { padding: 3px 4px; }');
+	$app->{read_only} = 0;
 	$app->{show_ratio} = 0;
 	$app->{vcs_mode} = 0;
+	$app->{vcs_class} = 'saiten::vcs_svn';
 	$app->{vcs_repo} = '/home/SVN/java';
 	$app->{vcs_user} = { neko => 'ねこ' };
 	$app->{base_dir} = 'java';
@@ -32,8 +34,10 @@ sub new {
 # $app->param_names : @param_names
 # $app の有効なパラメータ名のリストを返す。
 sub param_names {
-	return ('message_file', 'show_ratio', 'vcs_mode', 'vcs_repo', 'vcs_user',
-			'base_dir', 'file_ext', 'advanced_dir', 'advanced_class');
+	return ('message_file', 'read_only', 'show_ratio',
+			'vcs_mode', 'vcs_class', 'vcs_repo', 'vcs_user',
+			'base_dir', 'file_ext', 'basic_dir_func', 'advanced_dir_func',
+			'advanced_base', 'advanced_dir', 'advanced_class');
 }
 
 #
@@ -221,12 +225,17 @@ sub print_links {
 sub top {
 	my $app = shift;
 	my $html = $app->start_html;
-	$html->print_p('ログインしてください。');
-	$html->print_open_form('get');
-	$html->println('ログイン名：');
-	$html->print_input('text', $app->{user_key});
-	$html->print_input('submit', undef, 'Go');
-	$html->print_close('form');
+	if ($app->{read_only}) {
+		$html->print_p('※ ログインはできませんが、以下の情報' .
+				($app->{vcs_mode} ? ' (と、ソース) ' : '') . 'は見れます。');
+	} else {
+		$html->print_p('ログインしてください。');
+		$html->print_open_form('get');
+		$html->println('ログイン名：');
+		$html->print_input('text', $app->{user_key});
+		$html->print_input('submit', undef, 'Go');
+		$html->print_close('form');
+	}
 	$app->print_links;
 	$html->print_file($app->{message_file});
 	$html->print_tail;

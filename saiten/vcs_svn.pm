@@ -1,4 +1,4 @@
-package saiten::vcs;
+package saiten::vcs_svn;
 
 use strict;
 use warnings;
@@ -7,14 +7,15 @@ use warnings;
 # コンストラクタ
 #
 
-# saiten::vcs->new($error, $repo, $path)
-# コンストラクタ。引数はタイトルと CGI ファイル名。
+# saiten::vcs_svn->new($error, $repo, $fresh, $base, $path)
+# コンストラクタ。引数はリポジトリのパスなど。
 sub new {
-	my ($class, $error, $repo, $path) = @_;
+	my ($class, $error, $repo, $fresh, $base, $path) = @_;
 	my $vcs = {
 		error => $error,
-		repo => $repo,
-		path => $path,
+		repo => $repo . '/' . $fresh,
+		base => $base,
+		path => (defined $base ? $base . '/' : '') . $path,
 		info => {},
 		cats => {}
 	};
@@ -40,7 +41,7 @@ sub error {
 }
 
 #
-# svnlook ルーチン
+# vcs ルーチン
 #
 
 # $vcs->svnlook($cmd, @args)
@@ -110,6 +111,7 @@ sub cat {
 # 指定されたディレクトリにあるファイルのリストを返す。
 sub ls_files {
 	my ($vcs, $dirname) = @_;
+	$dirname = $vcs->{base} . '/' . $dirname if defined $vcs->{base};
 	my @files;
 	foreach my $path ($vcs->svnlook('tree', '--full-paths', $dirname)) {
 		if (length($path) > length($dirname) + 1 &&

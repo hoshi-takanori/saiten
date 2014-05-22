@@ -8,7 +8,7 @@ use saiten::staff;
 
 $ENV{LANG} = 'ja_JP.UTF-8';
 
-my $title = 'Java 研修支援システム (スタッフ用)';
+my $title = 'プログラミング研修支援システム (スタッフ用)';
 my $cgi_file = basename($0);
 
 my $dbname = 'dbi:Pg:dbname=java_db;host=localhost';

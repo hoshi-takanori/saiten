@@ -3,7 +3,6 @@ package saiten::saiten;
 use strict;
 use warnings;
 
-use saiten::vcs;
 use saiten::diff;
 
 #
@@ -78,12 +77,16 @@ __END__
 # vcs ページ
 #
 
-# $app->vcs($fresh [, $path]) : $vcs
+# $app->vcs($fresh, $path) : $vcs
 # vcs オブジェクトを生成する。
 sub vcs {
 	my ($app, $fresh, $path) = @_;
-	return saiten::vcs->new(
-			sub { $app->error(@_) }, $app->{vcs_repo} . '/' . $fresh, $path);
+	if (! defined $app->{vcs}) {
+		eval "require $app->{vcs_class}";
+		$app->{vcs} = $app->{vcs_class}->new(sub { $app->error(@_) },
+				$app->{vcs_repo}, $fresh, $app->{base_dir}, $path);
+	}
+	return $app->{vcs};
 }
 
 # $app->check_vcs_user($fresh) : $fresh_name
@@ -100,7 +103,7 @@ sub check_vcs_user {
 # vcs パス名 $path をチェックする。
 sub check_vcs_path {
 	my ($app, $path) = @_;
-	if (! defined $path || $path !~ /^[A-Za-z0-9\/]+\.[a-z]+$/) {
+	if (! defined $path || $path !~ /^[-A-Za-z0-9\/]+\.[a-z]+$/) {
 		$app->error('パス名が不適切です。');
 	}
 }
@@ -116,15 +119,28 @@ sub vcs_path {
 	if ($exercise =~ /^([^-])([^-]*)-(\d+)-(\d+)$/) {
 		my ($a, $aa, $b, $c, $d) = ($1, $1, $2, $3, $4);
 		$aa =~ tr/a-z/A-Z/;
-		$dir = "$a$b/$c";
-		$class = sprintf('%s%s%02d%02d', $aa, $b, $c, $d);
-	} elsif ($exercise =~ /^([^-]+)-(\d+)$/ && $app->{advanced_class}->{$1}) {
+		if (defined $app->{basic_dir_func}) {
+			($dir, $class) = $app->{basic_dir_func}->("$a$b", $c, $d);
+		} else {
+			$dir = "$a$b/$c";
+		}
+		if (! defined $class) {
+			$class = sprintf('%s%s%02d%02d', $aa, $b, $c, $d);
+		}
+	} elsif ($exercise =~ /^([^-]+)-(\d+)$/) {
 		$dir = $app->{advanced_dir}->{$1} || $1;
-		$class = sprintf('%s%02d', $app->{advanced_class}->{$1}, $2);
-	} else {
+		if (defined $app->{advanced_dir_func}) {
+			($dir, $class) = $app->{advanced_dir_func}->($1, $2);
+		} elsif (! defined $app->{advanced_base}) {
+			$class = sprintf('%s%02d', $app->{advanced_class}->{$1}, $2);
+		} else {
+			$dir = $app->{advanced_base} . '/' . $1;
+			$class = $app->{advanced_class}->{$1};
+		}
+	}
+	if (! defined $dir || ! defined $class) {
 		$app->error('その問題には対応していません。');
 	}
-	$dir = $app->{base_dir} . '/' . $dir if defined $app->{base_dir};
 	$filename = $class . '.' . $app->{file_ext} if ! defined $filename;
 	return $dir . '/' . $filename, $dir, $filename;
 }
@@ -195,7 +211,7 @@ sub print_select_forms {
 	my ($app, $mode, $fresh, $fresh_class, $exercise, $basename, @files) = @_;
 	my $html = $app->{html};
 
-	$html->print_open('div', style => 'overflow: auto;');
+	$html->print_open('div', style => 'overflow: hidden;');
 
 	$html->print_open('div', style => 'float: left;');
 	$app->print_select_form($mode, $fresh, $fresh_class, $exercise);
@@ -204,7 +220,7 @@ sub print_select_forms {
 	if (@files) {
 		$html->print_tag('div', '　　', style => 'float: left;');
 
-		$html->print_open('div', style => 'float: left;');
+		$html->print_open('div', style => 'float: left; margin-right: -50%;');
 		$html->print_open_form('get');
 		$html->print_hidden($html->kv(mode => $mode), $app->kv_user,
 				fresh => $fresh, exercise => $exercise);
@@ -318,11 +334,11 @@ sub staff_vcs {
 	$app->add_style_script($fresh, $path);
 	my $html = $app->start_html('ソース閲覧');
 	$html->print_p('新人、' . $fresh_name . ' ' . $html->paren($fresh) .
-			(defined $filename ? " のファイル $filename です。" :
+			(defined $filename ? " のファイル $basename です。" :
 					" の問題 $exercise に対するソースです。"));
 
 	$app->print_select_forms('vcs', $fresh, $fresh_class, $exercise,
-			$basename, sort $app->vcs($fresh)->ls_files($dirname));
+			$basename, sort $app->vcs($fresh, $path)->ls_files($dirname));
 
 	$app->print_vcs($fresh, $path);
 
@@ -331,7 +347,7 @@ sub staff_vcs {
 }
 
 # $app->vcs_diff($fresh, $path, $old_rev, $new_rev)
-# vcs diff を表示する。
+# vcs diff データを送信する。
 sub vcs_diff {
 	my ($app, $fresh, $path, $old_rev, $new_rev) = @_;
 	$app->check_vcs_user($fresh);
